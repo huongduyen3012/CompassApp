@@ -1,131 +1,107 @@
-/**
- * Sample React Native App
- * https://github.com/facebook/react-native
- *
- * @format
- */
-
-import React from 'react';
-import type {PropsWithChildren} from 'react';
+import React, {useEffect, useState} from 'react';
 import {
-  ScrollView,
-  StatusBar,
+  Animated,
+  Dimensions,
+  NativeEventEmitter,
+  NativeModules,
   StyleSheet,
   Text,
-  useColorScheme,
   View,
 } from 'react-native';
+const {CompassModule} = NativeModules;
 
-import {
-  Colors,
-  DebugInstructions,
-  Header,
-  LearnMoreLinks,
-  ReloadInstructions,
-} from 'react-native/Libraries/NewAppScreen';
+const {width} = Dimensions.get('window');
 
-type SectionProps = PropsWithChildren<{
-  title: string;
-}>;
+export default function CompassScreen() {
+  const [compassDegree, setCompassDegree] = useState<number>(0);
+  const rotateValue = React.useRef(new Animated.Value(0)).current;
 
-function Section({children, title}: SectionProps): React.JSX.Element {
-  const isDarkMode = useColorScheme() === 'dark';
+  useEffect(() => {
+    const compassEmitter = new NativeEventEmitter(CompassModule);
+    const compassSubscription = compassEmitter.addListener(
+      'CompassUpdate',
+      data => {
+        setCompassDegree(data.azimuth);
+        rotateValue.setValue(360 - data.azimuth);
+      },
+    );
+
+    CompassModule.startCompass();
+
+    return () => {
+      compassSubscription.remove();
+      CompassModule.stopCompass();
+    };
+  }, [rotateValue]);
+
+  const spin = rotateValue.interpolate({
+    inputRange: [0, 360],
+    outputRange: ['0deg', '360deg'],
+  });
+
   return (
-    <View style={styles.sectionContainer}>
-      <Text
-        style={[
-          styles.sectionTitle,
-          {
-            color: isDarkMode ? Colors.white : Colors.black,
-          },
-        ]}>
-        {title}
-      </Text>
-      <Text
-        style={[
-          styles.sectionDescription,
-          {
-            color: isDarkMode ? Colors.light : Colors.dark,
-          },
-        ]}>
-        {children}
-      </Text>
+    <View style={styles.container}>
+      <View style={styles.compassContainer}>
+        <Animated.Image
+          source={require('./assets/compass-needle.png')}
+          style={[
+            styles.compassNeedle,
+            {
+              transform: [{rotate: spin}],
+            },
+          ]}
+        />
+        <Text style={styles.degreeText}>
+          Direction:
+          {Math.round(compassDegree)}°
+        </Text>
+        <Text style={styles.directionText}>{getDirection(compassDegree)}</Text>
+      </View>
     </View>
   );
 }
 
-function App(): React.JSX.Element {
-  const isDarkMode = useColorScheme() === 'dark';
-
-  const backgroundStyle = {
-    backgroundColor: isDarkMode ? Colors.darker : Colors.lighter,
-  };
-
-  /*
-   * To keep the template simple and small we're adding padding to prevent view
-   * from rendering under the System UI.
-   * For bigger apps the reccomendation is to use `react-native-safe-area-context`:
-   * https://github.com/AppAndFlow/react-native-safe-area-context
-   *
-   * You can read more about it here:
-   * https://github.com/react-native-community/discussions-and-proposals/discussions/827
-   */
-  const safePadding = '5%';
-
-  return (
-    <View style={backgroundStyle}>
-      <StatusBar
-        barStyle={isDarkMode ? 'light-content' : 'dark-content'}
-        backgroundColor={backgroundStyle.backgroundColor}
-      />
-      <ScrollView
-        style={backgroundStyle}>
-        <View style={{paddingRight: safePadding}}>
-          <Header/>
-        </View>
-        <View
-          style={{
-            backgroundColor: isDarkMode ? Colors.black : Colors.white,
-            paddingHorizontal: safePadding,
-            paddingBottom: safePadding,
-          }}>
-          <Section title="Step One">
-            Edit <Text style={styles.highlight}>App.tsx</Text> to change this
-            screen and then come back to see your edits.
-          </Section>
-          <Section title="See Your Changes">
-            <ReloadInstructions />
-          </Section>
-          <Section title="Debug">
-            <DebugInstructions />
-          </Section>
-          <Section title="Learn More">
-            Read the docs to discover what to do next:
-          </Section>
-          <LearnMoreLinks />
-        </View>
-      </ScrollView>
-    </View>
-  );
-}
+const getDirection = (degree: number): string => {
+  const directions = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+  const index = Math.round(degree / 45) % 8;
+  return directions[index];
+};
 
 const styles = StyleSheet.create({
-  sectionContainer: {
-    marginTop: 32,
-    paddingHorizontal: 24,
+  container: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  sectionTitle: {
+  compassContainer: {
+    width: width * 0.8,
+    height: width * 0.8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  compassBase: {
+    width: '100%',
+    height: '100%',
+    position: 'absolute',
+    resizeMode: 'contain',
+  },
+  compassNeedle: {
+    width: '80%',
+    height: '80%',
+    position: 'absolute',
+    resizeMode: 'contain',
+  },
+  degreeText: {
+    fontSize: 30,
+    fontWeight: 'bold',
+    position: 'absolute',
+    bottom: -80,
+  },
+  directionText: {
     fontSize: 24,
     fontWeight: '600',
-  },
-  sectionDescription: {
-    marginTop: 8,
-    fontSize: 18,
-    fontWeight: '400',
-  },
-  highlight: {
-    fontWeight: '700',
+    position: 'absolute',
+    bottom: -120,
   },
 });
-
-export default App;
